@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -6,14 +6,14 @@
 <meta name="color-scheme" content="light dark">
 <title>FP-10 Controller</title>
 <!--
-  FP-10 Controller â€” single-file remote for the Roland FP-10. No external dependencies; works offline.
+  FP-10 Controller — single-file remote for the Roland FP-10. No external dependencies; works offline.
   Protocol & verified values: PROTOCOL.md in the project folder.
   Connections:
-    â€¢ PC        â€” via the PC helper (python -m fp10.helper / "FP10-Controller-PC.bat"), which does the
+    • PC        — via the PC helper (python -m fp10.helper / "FP10-Controller-PC.bat"), which does the
                   Bluetooth pairing Windows browsers can't do. Used automatically when served by the helper.
-    â€¢ MIDI      â€” Web MIDI. Android Chrome: first connect the piano in a Bluetooth-MIDI app (FluidSynth MIDI);
+    • MIDI      — Web MIDI. Android Chrome: first connect the piano in a Bluetooth-MIDI app (FluidSynth MIDI);
                   also any USB-MIDI connection.
-    â€¢ Bluetooth â€” Web Bluetooth (only where the OS pairs the link itself).
+    • Bluetooth — Web Bluetooth (only where the OS pairs the link itself).
 -->
 <style>
   :root {
@@ -127,7 +127,7 @@ const A = {
 // Only these addresses are ever written (user-approved list).
 const WRITABLE = new Set([A.remote, A.tpWrite, A.mode, A.splitPoint, A.leftShift, A.splitBalance, A.dualShift,
   A.dualBalance, A.twin, A.tone, A.leftTone, A.dualTone, A.volume, A.tuning, A.ambience, A.brilliance, A.keyTouch]);
-const NOTE = ["C", "Câ™¯", "D", "Eâ™­", "E", "F", "Fâ™¯", "G", "Aâ™­", "A", "Bâ™­", "B"];
+const NOTE = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
 const noteName = n => NOTE[n % 12] + (Math.floor(n / 12) - 1);
 const signed = v => (v > 0 ? "+" : "") + v;
 
@@ -163,7 +163,7 @@ const TONE_GROUPS = [
   ["Hidden (not on the panel)", null, [[4, 0, "Saw/Square Lead"], [5, 0, "Sine Wave"]]],  // 3/0 is silent: omitted
 ];
 function toneName(code) {
-  if (!code) return "â€“";
+  if (!code) return "–";
   for (const [, cat, names] of TONE_GROUPS) {
     if (cat === null) { const h = names.find(x => x[0] === code[0] && x[1] === code[2]); if (h) return h[2]; }
     else if (cat === code[0] && names[code[2]]) return names[code[2]];
@@ -219,7 +219,7 @@ function connectPc() {
       ? "PC helper not running. Start \"FP10-Controller-PC.bat\" (or python -m fp10.helper)."
       : "Couldn't reach the PC helper from this website (browsers often block public sites from talking to your PC). Start \"FP10-Controller-PC.bat\" — it opens its own copy of this page at http://localhost:8710, which connects directly.");
     ws.onclose = () => { if (ready) disconnected("PC helper closed"); else fail("PC helper closed the connection."); };
-    ws.onopen = () => { status("PC helper: connecting to the piano (pairing takes a few seconds)â€¦", "busy"); ws.send(JSON.stringify({ cmd: "connect" })); };
+    ws.onopen = () => { status("PC helper: connecting to the piano (pairing takes a few seconds)…", "busy"); ws.send(JSON.stringify({ cmd: "connect" })); };
     ws.onmessage = e => {
       if (typeof e.data === "string") {
         const st = JSON.parse(e.data); log("helper: " + st.state + " " + (st.detail || ""));
@@ -356,7 +356,7 @@ function makeControl(s) {
   const valEl = el("span", { className: "val" });
   const head = el("div", { className: "head" }, el("label", { textContent: s.label }), valEl);
   item.append(head);
-  const fmt = v => v === undefined ? "â€“" : s.fmt ? s.fmt(v) : s.choices ? s.choices[v] : s.kind === "tuning" ? (440 + v / 10).toFixed(1) + " Hz"
+  const fmt = v => v === undefined ? "–" : s.fmt ? s.fmt(v) : s.choices ? s.choices[v] : s.kind === "tuning" ? (440 + v / 10).toFixed(1) + " Hz"
     : s.kind === "note" ? noteName(v) : String(v);
   let setValue;
   if (s.kind === "slider" || s.kind === "tuning") {
@@ -366,7 +366,7 @@ function makeControl(s) {
     item.append(r);
     const lo = s.ends ? s.ends[0] : s.kind === "tuning" ? "415.3 Hz" : fmt(s.lo), hi = s.ends ? s.ends[1] : s.kind === "tuning" ? "466.2 Hz" : fmt(s.hi);
     if (s.kind === "tuning") {
-      const minus = el("button", { textContent: "âˆ’0.1", disabled: true }), plus = el("button", { textContent: "+0.1", disabled: true }),
+      const minus = el("button", { textContent: "−0.1", disabled: true }), plus = el("button", { textContent: "+0.1", disabled: true }),
         reset = el("button", { textContent: "440.0", disabled: true });
       minus.onclick = () => applySetting(s, (state[s.key] ?? 0) - 1); plus.onclick = () => applySetting(s, (state[s.key] ?? 0) + 1);
       reset.onclick = () => applySetting(s, 0);
@@ -376,9 +376,9 @@ function makeControl(s) {
     } else item.append(el("div", { className: "ends" }, el("span", { textContent: lo }), el("span", { textContent: hi })));
     setValue = v => { if (!dragging) r.value = v; valEl.textContent = fmt(v); r.disabled = !transport; (item._btns || []).forEach(b => b.disabled = !transport); };
   } else if (s.kind === "stepper") {
-    const minus = el("button", { textContent: "âˆ’" }), plus = el("button", { textContent: "+" }), zero = el("button", { textContent: "0", className: "chip" });
+    const minus = el("button", { textContent: "−" }), plus = el("button", { textContent: "+" }), zero = el("button", { textContent: "0", className: "chip" });
     minus.onclick = () => applySetting(s, state[s.key] - 1); plus.onclick = () => applySetting(s, state[s.key] + 1); zero.onclick = () => applySetting(s, 0);
-    item.append(el("div", { className: "stepper", style: "margin-top:8px" }, minus, zero, plus, el("span", { className: "hint", textContent: signed(s.lo) + " â€¦ " + signed(s.hi) })));
+    item.append(el("div", { className: "stepper", style: "margin-top:8px" }, minus, zero, plus, el("span", { className: "hint", textContent: signed(s.lo) + " … " + signed(s.hi) })));
     setValue = v => { valEl.textContent = fmt(v); const on = !!transport && v !== undefined; minus.disabled = !on || v <= s.lo; plus.disabled = !on || v >= s.hi; zero.disabled = !on || v === 0; };
   } else if (s.kind === "select") {
     const seg = el("div", { className: "seg" });
@@ -404,7 +404,7 @@ async function applySetting(s, v) {
     await write(s.addr, encode(s, v));
     const got = decode(s, await read(s.readAddr || s.addr, s.size || 1));
     state[s.key] = got; render();
-    status(transport.name + " â€” " + (s.label || "Mode") + ": " + (got === v ? "set" : "piano stored " + got), got === v ? "ok" : "bad");
+    status(transport.name + " — " + (s.label || "Mode") + ": " + (got === v ? "set" : "piano stored " + got), got === v ? "ok" : "bad");
   } catch (e) { status((s.label || "Setting") + " failed: " + e.message, "bad"); }
 }
 
@@ -416,7 +416,7 @@ async function setTone(slot, code, name) {
     const got = await read(SLOT_DEFS[slot].addr, 3);
     state[slot] = got; render();
     const ok = got[0] === code[0] && got[2] === code[2];
-    status(transport.name + " â€” " + name + (ok ? "" : " (piano stored " + hex(got) + ")"), ok ? "ok" : "bad");
+    status(transport.name + " — " + name + (ok ? "" : " (piano stored " + hex(got) + ")"), ok ? "ok" : "bad");
   } catch (e) { status("Tone change failed: " + e.message, "bad"); }
 }
 
@@ -438,7 +438,7 @@ function buildTonesTab() {
   if (!slots.some(([k]) => k === pickerSlot)) pickerSlot = "tone";
   const sbox = $("toneSlots"); sbox.innerHTML = "";
   for (const [k, label] of slots) {
-    const b = el("button", { className: "slot" + (k === pickerSlot ? " on" : "") }, el("span", { textContent: label }), el("span", { className: "val", textContent: toneName(state[k]) + "  â€º" }));
+    const b = el("button", { className: "slot" + (k === pickerSlot ? " on" : "") }, el("span", { textContent: label }), el("span", { className: "val", textContent: toneName(state[k]) + "  ›" }));
     b.onclick = () => { pickerSlot = k; render(); $("tones").scrollIntoView({ behavior: "smooth", block: "start" }); };
     sbox.append(b);
   }
@@ -479,18 +479,18 @@ async function refresh() {
 
 async function connect(kind) {
   if (transport) await disconnect();
-  status("Connectingâ€¦", "busy");
+  status("Connecting…", "busy");
   try {
     transport = kind === "pc" ? await connectPc() : kind === "midi" ? await connectMidi() : await connectBle();
     log("connected via " + transport.name);
     const id = await identity();
     if (!id) {
-      status(transport.name + " â€” connected, but the piano doesn't answer." +
+      status(transport.name + " — connected, but the piano doesn't answer." +
         (kind === "ble" ? " This browser's Bluetooth link is probably unpaired/one-way; use PC or MIDI (see PROTOCOL.md)." : ""), "bad");
       $("btnRefresh").disabled = false; render(); return;
     }
     log("identity " + hex(id));
-    status(transport.name + " â€” connected", "ok");
+    status(transport.name + " — connected", "ok");
     $("btnRefresh").disabled = false;
     await refresh(); render();
     clearInterval(polling);
@@ -515,7 +515,7 @@ const android = /Android/i.test(navigator.userAgent);
 (servedByHelper ? $("btnPc") : android ? $("btnMidi") : $("btnPc")).classList.add("primary");
 if (android && !servedByHelper) $("btnPc").hidden = true;
 const caps = [];
-if (!window.isSecureContext) caps.push("this page isn't a secure context, so MIDI/Bluetooth are blocked â€” open it from https:// or http://localhost");
+if (!window.isSecureContext) caps.push("this page isn't a secure context, so MIDI/Bluetooth are blocked — open it from https:// or http://localhost");
 $("hint").textContent = caps.length ? "Note: " + caps.join("; ") + "." : android
   ? "Android: connect the FP-10 in a Bluetooth-MIDI app first (it shows a pairing prompt), then tap Connect (MIDI)."
   : servedByHelper ? "PC: connected through the local helper. The phone must not be connected to the piano at the same time."
