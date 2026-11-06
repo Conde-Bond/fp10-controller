@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -6,86 +6,105 @@
 <meta name="color-scheme" content="light dark">
 <title>FP-10 Controller</title>
 <!--
-  FP-10 Controller — single-file remote for the Roland FP-10 (transpose + voice).
-  Protocol: see PROTOCOL.md next to this file. No external dependencies; works offline.
-  Transports:
-    • Web MIDI  (Android Chrome: first connect the piano with a BLE-MIDI app such as FluidSynth MIDI
-                 or "MIDI BLE Connect" so Android creates the FP-10 MIDI device; USB cable on any OS)
-    • Web Bluetooth (direct BLE; only works where the OS pairs the link itself — see PROTOCOL.md)
+  FP-10 Controller â€” single-file remote for the Roland FP-10. No external dependencies; works offline.
+  Protocol & verified values: PROTOCOL.md in the project folder.
+  Connections:
+    â€¢ PC        â€” via the PC helper (python -m fp10.helper / "FP10-Controller-PC.bat"), which does the
+                  Bluetooth pairing Windows browsers can't do. Used automatically when served by the helper.
+    â€¢ MIDI      â€” Web MIDI. Android Chrome: first connect the piano in a Bluetooth-MIDI app (FluidSynth MIDI);
+                  also any USB-MIDI connection.
+    â€¢ Bluetooth â€” Web Bluetooth (only where the OS pairs the link itself).
 -->
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --fg: #15191e; --muted: #5f6b78; --line: #dde2e8;
-    --accent: #2f6fde; --accent-fg: #ffffff; --ok: #1f9d55; --warn: #c27c0e; --bad: #d23c3c;
-    --chip: #eef2f7; --chip-on: #2f6fde; --chip-on-fg: #ffffff;
+    --bg: #f5f6f8; --card: #ffffff; --fg: #15191e; --muted: #5f6b78; --line: #dde2e8;
+    --accent: #e8590c; --accent-fg: #ffffff; --ok: #1f9d55; --warn: #c27c0e; --bad: #d23c3c;
+    --chip: #eef1f5; --track: #d3d9e0;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f1418; --card: #182027; --fg: #e8edf2; --muted: #93a1ae; --line: #2a3540;
-      --accent: #5b93f5; --accent-fg: #0b1220; --ok: #3ccf7e; --warn: #f0b04a; --bad: #ff6b6b;
-      --chip: #212b34; --chip-on: #5b93f5; --chip-on-fg: #0b1220;
+      --bg: #121212; --card: #1c1c1c; --fg: #ececec; --muted: #9a9a9a; --line: #2c2c2c;
+      --accent: #ff6a1a; --accent-fg: #ffffff; --ok: #3ccf7e; --warn: #f0b04a; --bad: #ff6b6b;
+      --chip: #2a2a2a; --track: #3a3a3a;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0f1418; --card: #182027; --fg: #e8edf2; --muted: #93a1ae; --line: #2a3540;
-    --accent: #5b93f5; --accent-fg: #0b1220; --ok: #3ccf7e; --warn: #f0b04a; --bad: #ff6b6b;
-    --chip: #212b34; --chip-on: #5b93f5; --chip-on-fg: #0b1220;
+    --bg: #121212; --card: #1c1c1c; --fg: #ececec; --muted: #9a9a9a; --line: #2c2c2c;
+    --accent: #ff6a1a; --accent-fg: #ffffff; --ok: #3ccf7e; --warn: #f0b04a; --bad: #ff6b6b;
+    --chip: #2a2a2a; --track: #3a3a3a;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
-  h1 { font-size: 22px; margin: 4px 0 12px; display: flex; align-items: center; gap: 10px; }
+  main { max-width: 680px; margin: 0 auto; padding: 12px 16px 48px; }
+  h1 { font-size: 21px; margin: 6px 0 10px; display: flex; align-items: center; gap: 10px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.ok { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.bad { background: var(--bad); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 12px 0; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; margin: 10px 0; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  button { font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; background: var(--chip); color: var(--fg); cursor: pointer; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 10px 14px; background: var(--chip); color: var(--fg); cursor: pointer; }
   button.primary { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
   button:disabled { opacity: .45; cursor: default; }
-  #status { color: var(--muted); font-size: 14px; margin-top: 8px; min-height: 1.4em; }
-  .tp { display: grid; grid-template-columns: 64px 1fr 64px; gap: 10px; align-items: center; }
-  .tp button { font-size: 28px; padding: 10px 0; }
-  .tp .val { text-align: center; font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .tp .val small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
-  .scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .group { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  #status { color: var(--muted); font-size: 14px; margin: 8px 0 4px; min-height: 1.4em; }
+  .hint { font-size: 13px; color: var(--muted); margin: 4px 0 8px; }
+  .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: 14px 2px 0; }
+  .tab { background: none; border-radius: 0; padding: 10px 0; color: var(--muted); font-size: 18px; border-bottom: 3px solid transparent; }
+  .tab.on { color: var(--fg); border-bottom-color: var(--accent); }
+  .item { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .head label { font-size: 17px; }
+  .val { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 600; }
+  .val.accent { color: var(--accent); }
+  input[type=range] { width: 100%; margin: 12px 0 2px; accent-color: var(--accent); }
+  .ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .seg { display: flex; background: var(--chip); border-radius: 12px; padding: 4px; gap: 4px; margin-top: 8px; }
+  .seg button { flex: 1; background: none; padding: 9px 4px; font-size: 15px; }
+  .seg button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .stepper button { width: 44px; height: 40px; padding: 0; font-size: 22px; }
+  .slot { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; background: none; padding: 14px 0; border-radius: 0; border-bottom: 1px solid var(--line); }
+  .slot .val { color: var(--accent); }
+  .slot.on { box-shadow: inset 4px 0 0 var(--accent); padding-left: 10px; }
+  .group { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { padding: 9px 12px; border-radius: 999px; font-size: 14px; }
-  .chip.on { background: var(--chip-on); color: var(--chip-on-fg); font-weight: 600; }
-  details { margin-top: 8px; } summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .chip { padding: 8px 12px; border-radius: 999px; font-size: 14px; }
+  .chip.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  select { font: inherit; padding: 8px; border-radius: 8px; background: var(--chip); color: var(--fg); border: 1px solid var(--line); }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   #log { font: 12px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap; max-height: 40vh; overflow: auto; color: var(--muted); margin-top: 8px; }
-  .hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
   <h1><span id="dot" class="dot"></span>FP-10 Controller</h1>
 
-  <section class="card">
-    <h2>Connection</h2>
-    <div class="row">
-      <button id="btnMidi" class="primary">Connect (MIDI)</button>
-      <button id="btnBle">Connect (Bluetooth)</button>
-      <button id="btnRefresh" disabled>Refresh</button>
-    </div>
-    <div id="status">Not connected.</div>
-    <p class="hint" id="hint"></p>
-  </section>
+  <div class="row">
+    <button id="btnPc">Connect (PC)</button>
+    <button id="btnMidi">Connect (MIDI)</button>
+    <button id="btnBle">Connect (Bluetooth)</button>
+    <button id="btnRefresh" disabled>Refresh</button>
+  </div>
+  <div id="status">Not connected.</div>
+  <p class="hint" id="hint"></p>
 
-  <section class="card">
-    <h2>Transpose</h2>
-    <div class="tp">
-      <button id="tpDown" disabled aria-label="Transpose down">−</button>
-      <div class="val"><span id="tpVal">–</span><small id="tpNote">semitones</small></div>
-      <button id="tpUp" disabled aria-label="Transpose up">+</button>
-    </div>
-    <div class="scale"><span>−6</span><button id="tpZero" class="chip" disabled>Reset to 0</button><span>+5</span></div>
-  </section>
+  <nav class="tabs">
+    <button class="tab on" data-tab="settings">Settings</button>
+    <button class="tab" data-tab="tones">Tones</button>
+  </nav>
 
-  <section class="card">
-    <h2>Voice</h2>
-    <div id="tones"></div>
+  <section id="tab-settings" class="card"></section>
+
+  <section id="tab-tones" class="card" hidden>
+    <div class="item">
+      <div class="seg" id="modeSeg"></div>
+    </div>
+    <div id="toneSlots"></div>
+    <div id="modeControls"></div>
+    <div class="item">
+      <div class="head"><label>Choose a tone for: <span class="val accent" id="pickerTarget">Tone</span></label></div>
+      <div id="tones"></div>
+    </div>
   </section>
 
   <details>
@@ -96,28 +115,71 @@
 
 <script>
 "use strict";
-// ---------------- protocol constants (verified on FP-10, see PROTOCOL.md) ----------------
+// ======================= protocol (verified on an FP-10, see PROTOCOL.md) =======================
 const HEADER = [0xF0, 0x41, 0x10, 0x00, 0x00, 0x00, 0x28];
-const ADDR = { remote: 0x01000306, tpWrite: 0x01000307, tpRead: 0x01000101, tone: 0x01000207 };
-const WRITABLE = new Set([ADDR.remote, ADDR.tpWrite, ADDR.tone]);
-const TP_MIN = -6, TP_MAX = 5;
-const KEY_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
-const GROUPS = [
+const A = {
+  remote: 0x01000306, tpWrite: 0x01000307, tpRead: 0x01000101, block: 0x01000200, blockSize: 0x1E,
+  mode: 0x01000200, splitPoint: 0x01000201, leftShift: 0x01000202, splitBalance: 0x01000203,
+  dualShift: 0x01000204, dualBalance: 0x01000205, twin: 0x01000206, tone: 0x01000207, leftTone: 0x0100020A,
+  dualTone: 0x0100020D, volume: 0x01000213, tuning: 0x01000218, ambience: 0x0100021A, brilliance: 0x0100021C,
+  keyTouch: 0x0100021D,
+};
+// Only these addresses are ever written (user-approved list).
+const WRITABLE = new Set([A.remote, A.tpWrite, A.mode, A.splitPoint, A.leftShift, A.splitBalance, A.dualShift,
+  A.dualBalance, A.twin, A.tone, A.leftTone, A.dualTone, A.volume, A.tuning, A.ambience, A.brilliance, A.keyTouch]);
+const NOTE = ["C", "Câ™¯", "D", "Eâ™­", "E", "F", "Fâ™¯", "G", "Aâ™­", "A", "Bâ™­", "B"];
+const noteName = n => NOTE[n % 12] + (Math.floor(n / 12) - 1);
+const signed = v => (v > 0 ? "+" : "") + v;
+
+// Setting definitions: lo/hi are user-facing values; stored byte = value + off (2-byte: 7-bit pair).
+const SETTINGS = [
+  { key: "volume", label: "Master Volume", addr: A.volume, lo: 0, hi: 100, off: 0, kind: "slider" },
+  { key: "keyTouch", label: "Key Touch", addr: A.keyTouch, lo: 0, hi: 5, off: 0, kind: "select",
+    choices: ["Fix", "Super Light", "Light", "Medium", "Heavy", "Super Heavy"] },
+  { key: "tuning", label: "Master Tuning", addr: A.tuning, lo: -247, hi: 262, off: 256, size: 2, kind: "tuning" },
+  { key: "brilliance", label: "Brilliance", addr: A.brilliance, lo: -10, hi: 10, off: 0x40, kind: "slider", fmt: signed },
+  { key: "transpose", label: "Keyboard Transpose", addr: A.tpWrite, readAddr: A.tpRead, lo: -6, hi: 5, off: 0x40, kind: "stepper",
+    fmt: v => signed(v) + (v ? "  (C plays " + NOTE[(v + 12) % 12] + ")" : "") },
+  { key: "ambience", label: "Ambience", addr: A.ambience, lo: 0, hi: 10, off: 0, kind: "slider" },
+];
+const MODE_SETTINGS = {
+  mode: { key: "mode", addr: A.mode, lo: 0, hi: 3, off: 0, choices: ["Single", "Split", "Dual", "Twin"] },
+  splitPoint: { key: "splitPoint", label: "Split Point", addr: A.splitPoint, lo: 35, hi: 95, off: 0, kind: "note" },
+  leftShift: { key: "leftShift", label: "Left Shift", addr: A.leftShift, lo: -2, hi: 2, off: 0x40, kind: "stepper", fmt: v => signed(v) + " oct" },
+  splitBalance: { key: "splitBalance", label: "Balance", addr: A.splitBalance, lo: -8, hi: 8, off: 0x40, kind: "slider",
+    ends: ["Left louder", "Right louder"], fmt: signed },
+  dualShift: { key: "dualShift", label: "Tone 2 Shift", addr: A.dualShift, lo: -2, hi: 2, off: 0x40, kind: "stepper", fmt: v => signed(v) + " oct" },
+  dualBalance: { key: "dualBalance", label: "Balance", addr: A.dualBalance, lo: -8, hi: 8, off: 0x40, kind: "slider",
+    ends: ["Tone 1 louder", "Tone 2 louder"], fmt: signed },
+  twin: { key: "twin", label: "Twin Piano Mode", addr: A.twin, lo: 0, hi: 1, off: 0, kind: "select", choices: ["Pair", "Individual"] },
+};
+const TONE_GROUPS = [
   ["Pianos", 0, ["Grand Piano 1", "Grand Piano 2", "Grand Piano 3", "Grand Piano 4", "Ragtime Piano", "Harpsichord 1", "Harpsichord 2"]],
   ["E.Pianos & mallets", 1, ["E.Piano 1", "E.Piano 2", "E.Piano 3", "Clav", "Vibraphone", "Celesta", "Synth Bell"]],
   ["Strings, organs, choirs, guitars, basses", 2, ["Strings 1", "Strings 2", "Harp", "Jazz Organ 1", "Jazz Organ 2",
     "Church Organ 1", "Church Organ 2", "Accordion", "Choir 1", "Jazz Scat", "Choir 2", "Choir 3", "Synth Pad",
     "Nylon-str Gtr", "Steel-str Gtr", "Decay Strings", "Decay Choir", "Decay Choir Pad", "Acoustic Bass",
     "A.Bass + Cymbal", "Fingered Bass", "Thum Voice"]],
+  ["Hidden (not on the panel)", null, [[4, 0, "Saw/Square Lead"], [5, 0, "Sine Wave"]]],  // 3/0 is silent: omitted
 ];
-const HIDDEN = [[4, 0, "Saw/Square Lead"], [5, 0, "Sine Wave"]]; // 3/0 is accepted but silent: not offered
+function toneName(code) {
+  if (!code) return "â€“";
+  for (const [, cat, names] of TONE_GROUPS) {
+    if (cat === null) { const h = names.find(x => x[0] === code[0] && x[1] === code[2]); if (h) return h[2]; }
+    else if (cat === code[0] && names[code[2]]) return names[code[2]];
+  }
+  return code.map(b => b.toString(16).padStart(2, "0")).join(" ");
+}
 
+// ======================= helpers =======================
 const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); kids.forEach(k => e.append(k)); return e; };
 const hex = a => Array.from(a, b => b.toString(16).padStart(2, "0")).join(" ");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 function log(s) { const l = $("log"); l.textContent = new Date().toTimeString().slice(0, 8) + " " + s + "\n" + l.textContent.slice(0, 30000); }
 function status(s, state) { $("status").textContent = s; $("dot").className = "dot" + (state ? " " + state : ""); }
 
-// ---------------- Roland SysEx ----------------
+// ======================= Roland SysEx =======================
 const checksum = a => (128 - (a.reduce((s, x) => s + x, 0) % 128)) % 128;
 const addrBytes = a => [(a >>> 24) & 0x7F, (a >> 16) & 0x7F, (a >> 8) & 0x7F, a & 0x7F];
 function rq1(addr, size) {
@@ -134,11 +196,42 @@ function parseDT1(m) {
   const addr = ((m[8] << 24) | (m[9] << 16) | (m[10] << 8) | m[11]) >>> 0;
   return { addr, data: m.slice(12, -2), ok: checksum(m.slice(8, -2)) === m[m.length - 2] };
 }
+const isIdentity = m => m.length >= 15 && m[0] === 0xF0 && m[1] === 0x7E && m[3] === 6 && m[4] === 2;
 
-// ---------------- transports: both expose send(bytes) and call onMessage(bytes) ----------------
+// ======================= transports: { name, send(bytes), close() }; incoming -> onMessage =======================
 let transport = null;
 const listeners = new Set();
 function onMessage(m) { for (const f of [...listeners]) f(m); }
+
+function helperUrl() {
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && location.protocol === "http:";
+  return local ? `ws://${location.host}/ws` : "ws://localhost:8710/ws";
+}
+function connectPc() {
+  return new Promise((resolve, reject) => {
+    let ws;
+    try { ws = new WebSocket(helperUrl()); } catch (e) { reject(e); return; }
+    ws.binaryType = "arraybuffer";
+    let ready = false;
+    const fail = msg => { if (!ready) { reject(new Error(msg)); try { ws.close(); } catch (_) {} } };
+    const timer = setTimeout(() => fail("The PC helper didn't connect to the piano within 30 s."), 30000);
+    ws.onerror = () => fail("PC helper not running. Start \"FP10-Controller-PC.bat\" (or python -m fp10.helper).");
+    ws.onclose = () => { if (ready) disconnected("PC helper closed"); else fail("PC helper closed the connection."); };
+    ws.onopen = () => { status("PC helper: connecting to the piano (pairing takes a few seconds)â€¦", "busy"); ws.send(JSON.stringify({ cmd: "connect" })); };
+    ws.onmessage = e => {
+      if (typeof e.data === "string") {
+        const st = JSON.parse(e.data); log("helper: " + st.state + " " + (st.detail || ""));
+        if (st.state === "connected" && !ready) {
+          ready = true; clearTimeout(timer);
+          resolve({ name: "PC (Bluetooth via helper)", send: async m => ws.send(new Uint8Array(m)), close: async () => ws.close() });
+        } else if (st.state === "error" && !ready) { clearTimeout(timer); fail("PC helper: " + st.detail); }
+        else if (st.state === "disconnected" && ready) disconnected("piano link dropped");
+        return;
+      }
+      onMessage(Array.from(new Uint8Array(e.data)));
+    };
+  });
+}
 
 async function connectMidi() {
   if (!navigator.requestMIDIAccess) throw new Error("Web MIDI is not available in this browser.");
@@ -146,34 +239,27 @@ async function connectMidi() {
   const match = p => /FP-?10|Roland/i.test(p.name) && p.state !== "disconnected";
   const ins = [...access.inputs.values()].filter(match), outs = [...access.outputs.values()].filter(match);
   log("MIDI inputs: " + [...access.inputs.values()].map(p => p.name + "(" + p.state + ")").join(", "));
-  if (!ins.length || !outs.length) throw new Error("No FP-10 MIDI port. On Android, connect the piano first in a Bluetooth-MIDI app (e.g. FluidSynth MIDI), then reload this page.");
-  // Android can list a stale FP-10 device next to the live one (same name). Listen on every candidate
-  // input, then try each output until the piano answers an Identity Request.
+  if (!ins.length || !outs.length) throw new Error("No FP-10 MIDI port. On Android, connect the piano first in a Bluetooth-MIDI app (e.g. FluidSynth MIDI), then reload this page. On a PC, use Connect (PC).");
+  // Android can list a stale FP-10 next to the live one: listen on all, keep the output that answers.
   let heardOn = null;
-  for (const inp of ins) {
-    await inp.open();
-    inp.onmidimessage = e => { const m = Array.from(e.data); if (m[0] === 0xF0 && m[1] === 0x7E && m[4] === 2) heardOn = inp; onMessage(m); };
-  }
+  for (const inp of ins) { await inp.open(); inp.onmidimessage = e => { const m = Array.from(e.data); if (isIdentity(m)) heardOn = inp; onMessage(m); }; }
   let chosen = null;
-  for (const out of outs.reverse()) {             // newest device is usually last
-    await out.open();
-    await new Promise(r => setTimeout(r, 300));    // first message right after open can be lost
+  for (const out of outs.reverse()) {
+    await out.open(); await sleep(300);
     for (let a = 0; a < 2 && !chosen; a++) {
-      const p = waitFor(m => (m[0] === 0xF0 && m[1] === 0x7E && m[3] === 6 && m[4] === 2) ? m : null, 1200);
+      const p = waitFor(m => isIdentity(m) ? m : null, 1200);
       out.send([0xF0, 0x7E, 0x10, 0x06, 0x01, 0xF7]);
       if (await p) chosen = out;
     }
-    log("output " + out.name + " [" + out.id + "]: " + (chosen === out ? "answers" : "no answer"));
+    log("output " + out.name + ": " + (chosen === out ? "answers" : "no answer"));
     if (chosen) break;
   }
-  const out = chosen || outs[0];
-  const inp = heardOn || ins[ins.length - 1];
+  const out = chosen || outs[0], inp = heardOn || ins[ins.length - 1];
   for (const i of ins) if (i !== inp) i.onmidimessage = null;
   access.onstatechange = e => { if (e.port.id === inp.id && e.port.state === "disconnected") disconnected("MIDI port went away"); };
   return { name: "MIDI: " + inp.name, send: async m => out.send(m), close: async () => { inp.onmidimessage = null; } };
 }
 
-// BLE-MIDI framing
 const SVC = "03b80e5a-ede8-4b33-a751-6ce34ec4c700", CHR = "7772e5db-3868-4112-a1a9-f2669d106bf3";
 function packetize(msg, max = 20) {
   const t = Math.floor(performance.now()) & 0x1FFF, hdr = 0x80 | ((t >> 7) & 0x3F), ts = 0x80 | (t & 0x7F);
@@ -211,7 +297,7 @@ async function connectBle() {
   dev.addEventListener("gattserverdisconnected", () => disconnected("Bluetooth link dropped"));
   let gatt = null, err = null;
   for (let a = 1; a <= 4 && !gatt; a++) {
-    try { gatt = await dev.gatt.connect(); } catch (e) { err = e; log("connect attempt " + a + ": " + e); await new Promise(r => setTimeout(r, 1000)); }
+    try { gatt = await dev.gatt.connect(); } catch (e) { err = e; log("connect attempt " + a + ": " + e); await sleep(1000); }
   }
   if (!gatt) throw err;
   const ch = await (await gatt.getPrimaryService(SVC)).getCharacteristic(CHR);
@@ -220,12 +306,12 @@ async function connectBle() {
   await ch.startNotifications();
   return {
     name: "Bluetooth: " + dev.name,
-    send: async m => { const pk = packetize(m); for (const p of pk) { await ch.writeValueWithoutResponse(new Uint8Array(p)); if (pk.length > 1) await new Promise(r => setTimeout(r, 15)); } },
+    send: async m => { const pk = packetize(m); for (const p of pk) { await ch.writeValueWithoutResponse(new Uint8Array(p)); if (pk.length > 1) await sleep(15); } },
     close: async () => { try { dev.gatt.disconnect(); } catch (_) {} },
   };
 }
 
-// ---------------- FP-10 commands ----------------
+// ======================= FP-10 commands =======================
 function waitFor(pred, ms = 1500) {
   return new Promise(res => {
     const f = m => { const r = pred(m); if (r) { listeners.delete(f); clearTimeout(t); res(r); } };
@@ -233,7 +319,7 @@ function waitFor(pred, ms = 1500) {
     listeners.add(f);
   });
 }
-let queue = Promise.resolve();               // serialise requests
+let queue = Promise.resolve();
 const serial = fn => (queue = queue.then(fn, fn));
 function read(addr, size) {
   return serial(async () => {
@@ -247,95 +333,193 @@ function read(addr, size) {
 }
 let remoteOn = false;
 async function write(addr, data) {
-  if (!remoteOn) { await serial(() => transport.send(dt1(ADDR.remote, [1]))); remoteOn = true; }
-  await serial(async () => { await transport.send(dt1(addr, data)); await new Promise(r => setTimeout(r, 60)); });
+  if (!remoteOn) { await serial(() => transport.send(dt1(A.remote, [1]))); remoteOn = true; }
+  await serial(async () => { await transport.send(dt1(addr, data)); await sleep(120); });
 }
 async function identity() {
-  const p = waitFor(m => (m.length >= 15 && m[0] === 0xF0 && m[1] === 0x7E && m[3] === 6 && m[4] === 2) ? m : null, 2000);
+  const p = waitFor(m => isIdentity(m) ? m : null, 2500);
   await serial(() => transport.send([0xF0, 0x7E, 0x10, 0x06, 0x01, 0xF7]));
   return p;
 }
+const encode = (s, v) => { const x = v + s.off; return s.size === 2 ? [(x >> 7) & 0x7F, x & 0x7F] : [x]; };
+const decode = (s, d) => (s.size === 2 ? ((d[0] & 0x7F) << 7 | (d[1] & 0x7F)) : d[0]) - s.off;
 
-// ---------------- UI ----------------
-let tpValue = null, toneCode = null, polling = null;
-function renderTranspose() {
-  $("tpVal").textContent = tpValue === null ? "–" : (tpValue > 0 ? "+" : "") + tpValue;
-  $("tpNote").textContent = tpValue === null ? "semitones" : (tpValue === 0 ? "no transpose" : "C plays " + KEY_NAMES[(tpValue + 12) % 12]);
-  const on = !!transport && tpValue !== null;
-  $("tpDown").disabled = !on || tpValue <= TP_MIN; $("tpUp").disabled = !on || tpValue >= TP_MAX; $("tpZero").disabled = !on || tpValue === 0;
+// ======================= state + UI =======================
+const state = {};          // key -> value (numbers); tone slots -> [cat,0,idx]
+let dragging = false, polling = null, pickerSlot = "tone";
+const controls = {};       // key -> { setValue(v) }
+
+function makeControl(s) {
+  const item = el("div", { className: "item" });
+  const valEl = el("span", { className: "val" });
+  const head = el("div", { className: "head" }, el("label", { textContent: s.label }), valEl);
+  item.append(head);
+  const fmt = v => v === undefined ? "â€“" : s.fmt ? s.fmt(v) : s.choices ? s.choices[v] : s.kind === "tuning" ? (440 + v / 10).toFixed(1) + " Hz"
+    : s.kind === "note" ? noteName(v) : String(v);
+  let setValue;
+  if (s.kind === "slider" || s.kind === "tuning") {
+    const r = el("input", { type: "range", min: s.lo, max: s.hi, step: 1, disabled: true });
+    r.oninput = () => { dragging = true; valEl.textContent = fmt(+r.value); };
+    r.onchange = async () => { dragging = false; await applySetting(s, +r.value); };
+    item.append(r);
+    const lo = s.ends ? s.ends[0] : s.kind === "tuning" ? "415.3 Hz" : fmt(s.lo), hi = s.ends ? s.ends[1] : s.kind === "tuning" ? "466.2 Hz" : fmt(s.hi);
+    if (s.kind === "tuning") {
+      const minus = el("button", { textContent: "âˆ’0.1", disabled: true }), plus = el("button", { textContent: "+0.1", disabled: true }),
+        reset = el("button", { textContent: "440.0", disabled: true });
+      minus.onclick = () => applySetting(s, (state[s.key] ?? 0) - 1); plus.onclick = () => applySetting(s, (state[s.key] ?? 0) + 1);
+      reset.onclick = () => applySetting(s, 0);
+      item.append(el("div", { className: "ends" }, el("span", { textContent: lo }), el("span", { textContent: hi })),
+        el("div", { className: "row", style: "margin-top:8px" }, minus, reset, plus));
+      item._btns = [minus, plus, reset];
+    } else item.append(el("div", { className: "ends" }, el("span", { textContent: lo }), el("span", { textContent: hi })));
+    setValue = v => { if (!dragging) r.value = v; valEl.textContent = fmt(v); r.disabled = !transport; (item._btns || []).forEach(b => b.disabled = !transport); };
+  } else if (s.kind === "stepper") {
+    const minus = el("button", { textContent: "âˆ’" }), plus = el("button", { textContent: "+" }), zero = el("button", { textContent: "0", className: "chip" });
+    minus.onclick = () => applySetting(s, state[s.key] - 1); plus.onclick = () => applySetting(s, state[s.key] + 1); zero.onclick = () => applySetting(s, 0);
+    item.append(el("div", { className: "stepper", style: "margin-top:8px" }, minus, zero, plus, el("span", { className: "hint", textContent: signed(s.lo) + " â€¦ " + signed(s.hi) })));
+    setValue = v => { valEl.textContent = fmt(v); const on = !!transport && v !== undefined; minus.disabled = !on || v <= s.lo; plus.disabled = !on || v >= s.hi; zero.disabled = !on || v === 0; };
+  } else if (s.kind === "select") {
+    const seg = el("div", { className: "seg" });
+    const btns = s.choices.map((c, i) => { const b = el("button", { textContent: c }); b.onclick = () => applySetting(s, i); seg.append(b); return b; });
+    item.append(seg);
+    setValue = v => { valEl.textContent = fmt(v); btns.forEach((b, i) => { b.classList.toggle("on", i === v); b.disabled = !transport; }); };
+  } else if (s.kind === "note") {
+    const sel = el("select", { disabled: true });
+    for (let n = s.lo; n <= s.hi; n++) sel.append(el("option", { value: n, textContent: noteName(n) }));
+    sel.onchange = () => applySetting(s, +sel.value);
+    item.append(el("div", { className: "row", style: "margin-top:8px" }, sel, el("span", { className: "hint", textContent: "the split key is the top key of the left section" })));
+    setValue = v => { if (v !== undefined) sel.value = v; valEl.textContent = fmt(v); sel.disabled = !transport; };
+  }
+  controls[s.key] = { setValue };
+  setValue(state[s.key]);
+  return item;
 }
-function renderTones() {
-  const box = $("tones"); box.innerHTML = "";
-  const add = (title, items) => {
-    const g = document.createElement("div"); g.className = "group"; g.textContent = title; box.appendChild(g);
-    const c = document.createElement("div"); c.className = "chips"; box.appendChild(c);
-    for (const [cat, idx, name] of items) {
-      const b = document.createElement("button"); b.className = "chip"; b.textContent = name;
-      b.disabled = !transport; b.dataset.code = cat + "/" + idx;
-      if (toneCode && toneCode[0] === cat && toneCode[2] === idx) b.classList.add("on");
-      b.onclick = () => setTone(cat, idx, name); c.appendChild(b);
-    }
-  };
-  for (const [title, cat, names] of GROUPS) add(title, names.map((n, i) => [cat, i, n]));
-  add("Hidden (not on the panel)", HIDDEN);
-}
-async function refresh() {
+
+async function applySetting(s, v) {
+  if (!transport) return;
+  v = Math.max(s.lo, Math.min(s.hi, v));
   try {
-    tpValue = (await read(ADDR.tpRead, 1))[0] - 0x40;
-    toneCode = await read(ADDR.tone, 3);
-    renderTranspose(); renderTones();
+    await write(s.addr, encode(s, v));
+    const got = decode(s, await read(s.readAddr || s.addr, s.size || 1));
+    state[s.key] = got; render();
+    status(transport.name + " â€” " + (s.label || "Mode") + ": " + (got === v ? "set" : "piano stored " + got), got === v ? "ok" : "bad");
+  } catch (e) { status((s.label || "Setting") + " failed: " + e.message, "bad"); }
+}
+
+const SLOT_DEFS = { tone: { addr: A.tone }, leftTone: { addr: A.leftTone }, dualTone: { addr: A.dualTone } };
+async function setTone(slot, code, name) {
+  if (!transport) return;
+  try {
+    await write(SLOT_DEFS[slot].addr, code);
+    const got = await read(SLOT_DEFS[slot].addr, 3);
+    state[slot] = got; render();
+    const ok = got[0] === code[0] && got[2] === code[2];
+    status(transport.name + " â€” " + name + (ok ? "" : " (piano stored " + hex(got) + ")"), ok ? "ok" : "bad");
+  } catch (e) { status("Tone change failed: " + e.message, "bad"); }
+}
+
+function buildSettingsTab() {
+  const box = $("tab-settings"); box.innerHTML = "";
+  for (const s of SETTINGS) box.append(makeControl(s));
+}
+function slotsForMode(m) {
+  return m === 1 ? [["tone", "Right Tone"], ["leftTone", "Left Tone"]] : m === 2 ? [["tone", "Tone 1"], ["dualTone", "Tone 2"]] : [["tone", "Tone"]];
+}
+function buildTonesTab() {
+  const m = state.mode ?? 0;
+  const seg = $("modeSeg"); seg.innerHTML = "";
+  MODE_SETTINGS.mode.choices.forEach((c, i) => {
+    const b = el("button", { textContent: c, className: i === m ? "on" : "", disabled: !transport });
+    b.onclick = () => applySetting(MODE_SETTINGS.mode, i); seg.append(b);
+  });
+  const slots = slotsForMode(m);
+  if (!slots.some(([k]) => k === pickerSlot)) pickerSlot = "tone";
+  const sbox = $("toneSlots"); sbox.innerHTML = "";
+  for (const [k, label] of slots) {
+    const b = el("button", { className: "slot" + (k === pickerSlot ? " on" : "") }, el("span", { textContent: label }), el("span", { className: "val", textContent: toneName(state[k]) + "  â€º" }));
+    b.onclick = () => { pickerSlot = k; render(); $("tones").scrollIntoView({ behavior: "smooth", block: "start" }); };
+    sbox.append(b);
+  }
+  const mc = $("modeControls"); mc.innerHTML = "";
+  const keys = m === 1 ? ["splitBalance", "splitPoint", "leftShift"] : m === 2 ? ["dualBalance", "dualShift"] : m === 3 ? ["twin"] : [];
+  for (const k of keys) mc.append(makeControl(MODE_SETTINGS[k]));
+  $("pickerTarget").textContent = (slots.find(([k]) => k === pickerSlot) || [, "Tone"])[1];
+  const tbox = $("tones"); tbox.innerHTML = "";
+  const cur = state[pickerSlot];
+  for (const [title, cat, names] of TONE_GROUPS) {
+    tbox.append(el("div", { className: "group", textContent: title }));
+    const chips = el("div", { className: "chips" });
+    names.forEach((n, i) => {
+      const [c, idx, name] = cat === null ? n : [cat, i, n];
+      const b = el("button", { className: "chip" + (cur && cur[0] === c && cur[2] === idx ? " on" : ""), textContent: name, disabled: !transport });
+      b.onclick = () => setTone(pickerSlot, [c, 0, idx], name);
+      chips.append(b);
+    });
+    tbox.append(chips);
+  }
+}
+function render() {
+  for (const s of SETTINGS) controls[s.key]?.setValue(state[s.key]);
+  if (!dragging) buildTonesTab();
+}
+
+async function refresh() {
+  if (!transport || dragging) return;
+  try {
+    const blk = await read(A.block, A.blockSize);
+    const at = (addr, n = 1) => blk.slice(addr - A.block, addr - A.block + n);
+    for (const s of [...SETTINGS, ...Object.values(MODE_SETTINGS)]) if (s.key !== "transpose") state[s.key] = decode(s, at(s.addr, s.size || 1));
+    for (const [slot, d] of Object.entries(SLOT_DEFS)) state[slot] = at(d.addr, 3);
+    state.transpose = (await read(A.tpRead, 1))[0] - 0x40;
+    if (!dragging) render();
   } catch (e) { log("refresh: " + e.message); }
 }
-async function setTranspose(v) {
-  v = Math.max(TP_MIN, Math.min(TP_MAX, v));
-  try { await write(ADDR.tpWrite, [0x40 + v]); tpValue = (await read(ADDR.tpRead, 1))[0] - 0x40; renderTranspose();
-    status(transport.name + " — transpose " + (tpValue > 0 ? "+" : "") + tpValue + (tpValue === v ? "" : " (piano clamped it)"), "ok");
-  } catch (e) { status("Transpose failed: " + e.message, "bad"); }
-}
-async function setTone(cat, idx, name) {
-  try { await write(ADDR.tone, [cat, 0, idx]); toneCode = await read(ADDR.tone, 3); renderTones();
-    const ok = toneCode[0] === cat && toneCode[2] === idx;
-    status(transport.name + " — " + (ok ? name : "piano reports " + hex(toneCode)), ok ? "ok" : "bad");
-  } catch (e) { status("Voice change failed: " + e.message, "bad"); }
-}
+
 async function connect(kind) {
   if (transport) await disconnect();
-  status("Connecting…", "busy");
+  status("Connectingâ€¦", "busy");
   try {
-    transport = kind === "midi" ? await connectMidi() : await connectBle();
+    transport = kind === "pc" ? await connectPc() : kind === "midi" ? await connectMidi() : await connectBle();
     log("connected via " + transport.name);
     const id = await identity();
     if (!id) {
-      status(transport.name + " — connected, but the piano doesn't answer. " +
-        (kind === "ble" ? "This browser's Bluetooth link is probably unpaired/one-way; use MIDI (see PROTOCOL.md)." : ""), "bad");
-      $("btnRefresh").disabled = false; renderTones(); return;
+      status(transport.name + " â€” connected, but the piano doesn't answer." +
+        (kind === "ble" ? " This browser's Bluetooth link is probably unpaired/one-way; use PC or MIDI (see PROTOCOL.md)." : ""), "bad");
+      $("btnRefresh").disabled = false; render(); return;
     }
     log("identity " + hex(id));
-    status(transport.name + " — connected", "ok");
+    status(transport.name + " â€” connected", "ok");
     $("btnRefresh").disabled = false;
-    await refresh();
+    await refresh(); render();
     clearInterval(polling);
-    polling = setInterval(() => { if (!document.hidden && transport) refresh(); }, 4000);  // follow panel changes
-  } catch (e) { transport = null; status(e.message, "bad"); log("connect error: " + e); }
+    polling = setInterval(() => { if (!document.hidden) refresh(); }, 4000);   // follow panel changes
+  } catch (e) { transport = null; status(e.message, "bad"); log("connect error: " + e); render(); }
 }
-function disconnected(why) { log(why); transport = null; remoteOn = false; clearInterval(polling); status("Disconnected (" + why + ").", "bad"); renderTranspose(); renderTones(); $("btnRefresh").disabled = true; }
+function disconnected(why) { log(why); transport = null; remoteOn = false; clearInterval(polling); status("Disconnected (" + why + ").", "bad"); render(); $("btnRefresh").disabled = true; }
 async function disconnect() { try { await transport?.close(); } catch (_) {} transport = null; remoteOn = false; clearInterval(polling); }
 
+// ======================= wiring =======================
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  $("tab-settings").hidden = t.dataset.tab !== "settings"; $("tab-tones").hidden = t.dataset.tab !== "tones";
+});
+$("btnPc").onclick = () => connect("pc");
 $("btnMidi").onclick = () => connect("midi");
 $("btnBle").onclick = () => connect("ble");
 $("btnRefresh").onclick = refresh;
-$("tpDown").onclick = () => setTranspose(tpValue - 1);
-$("tpUp").onclick = () => setTranspose(tpValue + 1);
-$("tpZero").onclick = () => setTranspose(0);
 
+const servedByHelper = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.port === "8710";
+const android = /Android/i.test(navigator.userAgent);
+(servedByHelper ? $("btnPc") : android ? $("btnMidi") : $("btnPc")).classList.add("primary");
+if (android && !servedByHelper) $("btnPc").hidden = true;
 const caps = [];
-if (!window.isSecureContext) caps.push("this page isn't a secure context, so MIDI/Bluetooth are blocked — open it from https:// or http://localhost");
-if (!navigator.requestMIDIAccess) caps.push("no Web MIDI in this browser");
-if (!navigator.bluetooth) caps.push("no Web Bluetooth in this browser");
-$("hint").textContent = caps.length ? "Note: " + caps.join("; ") + "." :
-  "Android: connect the FP-10 in a Bluetooth-MIDI app first (it shows a pairing prompt), then tap Connect (MIDI).";
-renderTranspose(); renderTones();
-log("loaded; secureContext=" + window.isSecureContext + " midi=" + !!navigator.requestMIDIAccess + " bluetooth=" + !!navigator.bluetooth + " protocol=" + location.protocol);
+if (!window.isSecureContext) caps.push("this page isn't a secure context, so MIDI/Bluetooth are blocked â€” open it from https:// or http://localhost");
+$("hint").textContent = caps.length ? "Note: " + caps.join("; ") + "." : android
+  ? "Android: connect the FP-10 in a Bluetooth-MIDI app first (it shows a pairing prompt), then tap Connect (MIDI)."
+  : "PC: start \"FP10-Controller-PC.bat\" (it opens this page), then Connect (PC). The phone must not be connected to the piano.";
+buildSettingsTab(); render();
+log("loaded; secureContext=" + window.isSecureContext + " midi=" + !!navigator.requestMIDIAccess + " bluetooth=" + !!navigator.bluetooth + " helper=" + helperUrl());
+if (servedByHelper) connect("pc");   // one click less on the PC
 </script>
 </body>
 </html>
