@@ -1,6 +1,6 @@
 # FP-10 Controller
 
-A single-page remote for the Roland FP-10 digital piano: **transpose** (−6…+5) and **voice** (36 panel voices + 2 hidden ones).
+A single-page remote for the Roland FP-10 digital piano: **transpose** (−6…+5) and **voice** (36 voices + 2 hidden ones).
 No install, no external dependencies — the whole app is `index.html`.
 
 **Open:** https://conde-bond.github.io/fp10-controller/
