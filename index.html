@@ -215,7 +215,9 @@ function connectPc() {
     let ready = false;
     const fail = msg => { if (!ready) { reject(new Error(msg)); try { ws.close(); } catch (_) {} } };
     const timer = setTimeout(() => fail("The PC helper didn't connect to the piano within 30 s."), 30000);
-    ws.onerror = () => fail("PC helper not running. Start \"FP10-Controller-PC.bat\" (or python -m fp10.helper).");
+    ws.onerror = () => fail(location.hostname === "localhost" || location.hostname === "127.0.0.1"
+      ? "PC helper not running. Start \"FP10-Controller-PC.bat\" (or python -m fp10.helper)."
+      : "Couldn't reach the PC helper from this website (browsers often block public sites from talking to your PC). Start \"FP10-Controller-PC.bat\" — it opens its own copy of this page at http://localhost:8710, which connects directly.");
     ws.onclose = () => { if (ready) disconnected("PC helper closed"); else fail("PC helper closed the connection."); };
     ws.onopen = () => { status("PC helper: connecting to the piano (pairing takes a few seconds)â€¦", "busy"); ws.send(JSON.stringify({ cmd: "connect" })); };
     ws.onmessage = e => {
@@ -516,7 +518,8 @@ const caps = [];
 if (!window.isSecureContext) caps.push("this page isn't a secure context, so MIDI/Bluetooth are blocked â€” open it from https:// or http://localhost");
 $("hint").textContent = caps.length ? "Note: " + caps.join("; ") + "." : android
   ? "Android: connect the FP-10 in a Bluetooth-MIDI app first (it shows a pairing prompt), then tap Connect (MIDI)."
-  : "PC: start \"FP10-Controller-PC.bat\" (it opens this page), then Connect (PC). The phone must not be connected to the piano.";
+  : servedByHelper ? "PC: connected through the local helper. The phone must not be connected to the piano at the same time."
+  : "PC: start \"FP10-Controller-PC.bat\" — it opens the PC version of this page (http://localhost:8710) and connects. The phone must not be connected to the piano at the same time.";
 buildSettingsTab(); render();
 log("loaded; secureContext=" + window.isSecureContext + " midi=" + !!navigator.requestMIDIAccess + " bluetooth=" + !!navigator.bluetooth + " helper=" + helperUrl());
 if (servedByHelper) connect("pc");   // one click less on the PC
